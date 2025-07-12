@@ -20,14 +20,16 @@ import {
   IconChartLine,
   IconCube,
   IconSettings,
+  IconEdit,
 } from "@tabler/icons-react";
 import useStore, { Example } from "./store";
 import ExamplesPanel from "../src/components/ExamplesPanel";
 import SimulationManager from "../src/components/SimulationManager";
+import CustomSimulationManager from "../src/components/CustomSimulationManager";
 import ResultsCharts from "../src/components/ResultsCharts";
 import GLTFViewer from "../src/components/GLTFViewer";
 
-type ActiveTab = "examples" | "simulations" | "results" | "viewer";
+type ActiveTab = "examples" | "simulations" | "custom" | "results" | "viewer";
 
 export default function MainPage() {
   const [opened, { toggle }] = useDisclosure();
@@ -45,6 +47,12 @@ export default function MainPage() {
       label: "Examples",
       value: "examples" as ActiveTab,
       description: "Browse and select simulation examples",
+    },
+    {
+      icon: IconEdit,
+      label: "Custom Simulations",
+      value: "custom" as ActiveTab,
+      description: "Create and manage custom simulations",
     },
     {
       icon: IconRun,
@@ -75,6 +83,9 @@ export default function MainPage() {
       case "examples":
         return <ExamplesPanel onRunSimulation={handleExampleRun} />;
 
+      case "custom":
+        return <CustomSimulationManager />;
+
       case "simulations":
         return <SimulationManager selectedExample={selectedExample} />;
 
@@ -95,7 +106,7 @@ export default function MainPage() {
         );
         const gltfUrl =
           gltfFile && currentSimulation
-            ? `http://localhost:5001/api/simulations/${currentSimulation}/download/${gltfFile.path}`
+            ? `http://localhost:5000/api/simulations/${currentSimulation}/download/${gltfFile.path}`
             : undefined;
 
         return (

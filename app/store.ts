@@ -1,7 +1,7 @@
 import axios from "axios";
 import { create } from "zustand";
 
-const API_URL = "http://localhost:5001/api";
+const API_URL = "http://localhost:5000/api";
 
 const api = axios.create({
   baseURL: API_URL,
@@ -44,11 +44,26 @@ export interface SimulationData {
   forces?: Record<string, number[]>;
 }
 
+export interface CustomSimulation {
+  filename: string;
+  path: string;
+  project_name: string;
+  components: number;
+  simulation_time: number;
+  description: string;
+  created_at: string;
+}
+
 interface StoreState {
   // Examples
   examples: Example[];
   selectedExample: Example | null;
   exampleContent: any | null;
+
+  // Custom Simulations
+  customSimulations: CustomSimulation[];
+  selectedCustomSimulation: CustomSimulation | null;
+  customSimulationContent: any | null;
 
   // Simulations
   simulations: Record<string, SimulationStatus>;
@@ -64,6 +79,23 @@ interface StoreState {
   fetchExamples: () => Promise<void>;
   selectExample: (example: Example) => void;
   fetchExampleContent: (filename: string) => Promise<void>;
+
+  // Custom Simulations
+  fetchCustomSimulations: () => Promise<void>;
+  selectCustomSimulation: (customSimulation: CustomSimulation) => void;
+  fetchCustomSimulationContent: (filename: string) => Promise<void>;
+  saveCustomSimulation: (
+    filename: string,
+    content: any,
+    overwrite?: boolean
+  ) => Promise<boolean>;
+  deleteCustomSimulation: (filename: string) => Promise<boolean>;
+  copyExampleToCustom: (
+    exampleFilename: string,
+    newFilename: string
+  ) => Promise<any>;
+
+  // Simulations
   startSimulation: (config: {
     source_type: string;
     filename?: string;
@@ -72,6 +104,7 @@ interface StoreState {
   fetchSimulationStatus: (simulationId: string) => Promise<void>;
   fetchSimulationResults: (simulationId: string) => Promise<void>;
   fetchAllSimulations: () => Promise<void>;
+  deleteSimulation: (simulationId: string) => Promise<boolean>;
   clearError: () => void;
 }
 
@@ -80,6 +113,9 @@ const useStore = create<StoreState>((set, get) => ({
   examples: [],
   selectedExample: null,
   exampleContent: null,
+  customSimulations: [],
+  selectedCustomSimulation: null,
+  customSimulationContent: null,
   simulations: {},
   currentSimulation: null,
   simulationResults: {},
@@ -103,6 +139,98 @@ const useStore = create<StoreState>((set, get) => ({
 
   selectExample: (example: Example) => {
     set({ selectedExample: example });
+  },
+
+  // Custom Simulations
+  fetchCustomSimulations: async () => {
+    try {
+      set({ loading: true, error: null });
+      const { data } = await api.get("/custom-simulations");
+      set({ customSimulations: data.custom_simulations || [], loading: false });
+    } catch (error: any) {
+      set({
+        error: error.message || "Failed to fetch custom simulations",
+        loading: false,
+      });
+    }
+  },
+
+  selectCustomSimulation: (customSimulation: CustomSimulation) => {
+    set({ selectedCustomSimulation: customSimulation });
+  },
+
+  fetchCustomSimulationContent: async (filename: string) => {
+    try {
+      set({ loading: true, error: null });
+      const { data } = await api.get(`/custom-simulations/${filename}`);
+      set({ customSimulationContent: data.content, loading: false });
+    } catch (error: any) {
+      set({
+        error: error.message || "Failed to fetch custom simulation content",
+        loading: false,
+      });
+    }
+  },
+
+  saveCustomSimulation: async (
+    filename: string,
+    content: any,
+    overwrite = false
+  ) => {
+    try {
+      set({ loading: true, error: null });
+      await api.post("/custom-simulations", {
+        filename,
+        content,
+        overwrite,
+      });
+      set({ loading: false });
+      // Refresh custom simulations list
+      get().fetchCustomSimulations();
+      return true;
+    } catch (error: any) {
+      set({
+        error: error.message || "Failed to save custom simulation",
+        loading: false,
+      });
+      return false;
+    }
+  },
+
+  deleteCustomSimulation: async (filename: string) => {
+    try {
+      set({ loading: true, error: null });
+      await api.delete(`/custom-simulations/${filename}`);
+      set({ loading: false });
+      // Refresh custom simulations list
+      get().fetchCustomSimulations();
+      return true;
+    } catch (error: any) {
+      set({
+        error: error.message || "Failed to delete custom simulation",
+        loading: false,
+      });
+      return false;
+    }
+  },
+
+  copyExampleToCustom: async (exampleFilename: string, newFilename: string) => {
+    try {
+      set({ loading: true, error: null });
+      const { data } = await api.post(`/examples/${exampleFilename}/copy`, {
+        new_filename: newFilename,
+      });
+      set({ loading: false });
+      // Refresh custom simulations list
+      get().fetchCustomSimulations();
+      return data.content;
+    } catch (error: any) {
+      set({
+        error: error.message || "Failed to copy example",
+        loading: false,
+      });
+      return null;
+    }
   },
 
   fetchExampleContent: async (filename: string) => {
@@ -214,6 +342,39 @@ const useStore = create<StoreState>((set, get) => ({
       }
     } catch (error: any) {
       console.error("Failed to fetch simulations:", error);
+    }
+  },
+
+  deleteSimulation: async (simulationId: string) => {
+    try {
+      set({ loading: true, error: null });
+      await api.delete(`/simulations/${simulationId}`);
+
+      // Remove from local state
+      const { simulations, simulationResults } = get();
+      const newSimulations = { ...simulations };
+      const newResults = { ...simulationResults };
+
+      delete newSimulations[simulationId];
+      delete newResults[simulationId];
+
+      set({
+        simulations: newSimulations,
+        simulationResults: newResults,
+        currentSimulation:
+          get().currentSimulation === simulationId
+            ? null
+            : get().currentSimulation,
+        loading: false,
+      });
+
+      return true;
+    } catch (error: any) {
+      set({
+        error: error.message || "Failed to delete simulation",
+        loading: false,
+      });
+      return false;
     }
   },
 

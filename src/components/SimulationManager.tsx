@@ -26,6 +26,7 @@ import {
   IconEye,
   IconAlertCircle,
   IconPlayerPlay,
+  IconTrash,
 } from "@tabler/icons-react";
 import useStore, { Example, SimulationStatus } from "../../app/store";
 import GLTFViewer from "./GLTFViewer";
@@ -49,6 +50,7 @@ export default function SimulationManager({
     fetchSimulationStatus,
     fetchSimulationResults,
     fetchAllSimulations,
+    deleteSimulation,
     clearError,
   } = useStore();
 
@@ -56,6 +58,10 @@ export default function SimulationManager({
   const [selectedSimulationId, setSelectedSimulationId] = useState<
     string | null
   >(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [simulationToDelete, setSimulationToDelete] = useState<string | null>(
+    null
+  );
 
   // Poll for simulation status updates
   useEffect(() => {
@@ -111,6 +117,21 @@ export default function SimulationManager({
     setResultsModalOpen(true);
   };
 
+  const handleDeleteSimulation = (simulationId: string) => {
+    setSimulationToDelete(simulationId);
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDeleteSimulation = async () => {
+    if (simulationToDelete) {
+      const success = await deleteSimulation(simulationToDelete);
+      if (success) {
+        setDeleteConfirmOpen(false);
+        setSimulationToDelete(null);
+      }
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "running":
@@ -161,7 +182,7 @@ export default function SimulationManager({
     f.name.endsWith(".gltf")
   );
   const gltfUrl = gltfFile
-    ? `http://localhost:5001/api/simulations/${selectedSimulationId}/download/${gltfFile.path}`
+    ? `http://localhost:5000/api/simulations/${selectedSimulationId}/download/${gltfFile.path}`
     : undefined;
 
   return (
@@ -304,6 +325,15 @@ export default function SimulationManager({
                             </ActionIcon>
                           </Tooltip>
                         )}
+                        <Tooltip label="Delete simulation">
+                          <ActionIcon
+                            variant="light"
+                            color="red"
+                            onClick={() => handleDeleteSimulation(id)}
+                          >
+                            <IconTrash size={16} />
+                          </ActionIcon>
+                        </Tooltip>
                       </Group>
                     </Group>
                   </Card>
@@ -374,7 +404,7 @@ export default function SimulationManager({
                           <ActionIcon
                             variant="light"
                             component="a"
-                            href={`http://localhost:5001/api/simulations/${selectedSimulationId}/download/${file.path}`}
+                            href={`http://localhost:5000/api/simulations/${selectedSimulationId}/download/${file.path}`}
                             target="_blank"
                           >
                             <IconDownload size={16} />
@@ -388,6 +418,41 @@ export default function SimulationManager({
             </Tabs.Panel>
           </Tabs>
         )}
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        opened={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        title="Delete Simulation"
+        size="sm"
+      >
+        <Stack gap="md">
+          <Text>
+            Are you sure you want to delete this simulation? This action cannot
+            be undone. All simulation files and results will be permanently
+            removed.
+          </Text>
+
+          {simulationToDelete && (
+            <Text size="sm" c="dimmed">
+              Simulation ID: {simulationToDelete.slice(0, 8)}...
+            </Text>
+          )}
+
+          <Group justify="flex-end" gap="sm">
+            <Button variant="light" onClick={() => setDeleteConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              onClick={confirmDeleteSimulation}
+              loading={loading}
+            >
+              Delete
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
     </Stack>
   );

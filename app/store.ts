@@ -36,6 +36,35 @@ export interface SimulationResult {
   }>;
 }
 
+export interface Component {
+  filename: string;
+  path: string;
+  name: string;
+  description: string;
+  material: string;
+  cad_commands: number;
+  created_at: string;
+}
+
+export interface CADCommand {
+  command: string;
+  params: Record<string, any>;
+}
+
+export interface ComponentContent {
+  name: string;
+  description?: string;
+  material?: string;
+  density?: number;
+  color?: [number, number, number];
+  cad_commands: CADCommand[];
+  collision?: {
+    enabled: boolean;
+    shape: string;
+    params: Record<string, any>;
+  };
+}
+
 export interface SimulationData {
   timestep: number;
   positions: Record<string, number[]>;
@@ -65,6 +94,11 @@ interface StoreState {
   selectedCustomSimulation: CustomSimulation | null;
   customSimulationContent: any | null;
 
+  // Components
+  components: Component[];
+  selectedComponent: Component | null;
+  componentContent: ComponentContent | null;
+
   // Simulations
   simulations: Record<string, SimulationStatus>;
   currentSimulation: string | null;
@@ -79,6 +113,21 @@ interface StoreState {
   fetchExamples: () => Promise<void>;
   selectExample: (example: Example) => void;
   fetchExampleContent: (filename: string) => Promise<void>;
+
+  // Component Actions
+  fetchComponents: () => Promise<void>;
+  selectComponent: (component: Component) => void;
+  fetchComponentContent: (filename: string) => Promise<void>;
+  saveComponent: (
+    filename: string,
+    content: ComponentContent,
+    overwrite?: boolean
+  ) => Promise<boolean>;
+  deleteComponent: (filename: string) => Promise<boolean>;
+  generateComponentPreview: (
+    cad_commands: CADCommand[],
+    color?: [number, number, number]
+  ) => Promise<string | null>;
 
   // Custom Simulations
   fetchCustomSimulations: () => Promise<void>;
@@ -116,6 +165,9 @@ const useStore = create<StoreState>((set, get) => ({
   customSimulations: [],
   selectedCustomSimulation: null,
   customSimulationContent: null,
+  components: [],
+  selectedComponent: null,
+  componentContent: null,
   simulations: {},
   currentSimulation: null,
   simulationResults: {},
@@ -243,6 +295,110 @@ const useStore = create<StoreState>((set, get) => ({
         error: error.message || "Failed to fetch example content",
         loading: false,
       });
+    }
+  },
+
+  // Component Actions
+  fetchComponents: async () => {
+    try {
+      set({ loading: true, error: null });
+      const { data } = await api.get("/components");
+      set({ components: data.components || [], loading: false });
+    } catch (error: any) {
+      set({
+        error: error.message || "Failed to fetch components",
+        loading: false,
+      });
+    }
+  },
+
+  selectComponent: (component: Component) => {
+    set({ selectedComponent: component });
+  },
+
+  fetchComponentContent: async (filename: string) => {
+    try {
+      set({ loading: true, error: null });
+      const { data } = await api.get(`/components/${filename}`);
+      set({ componentContent: data.content, loading: false });
+    } catch (error: any) {
+      set({
+        error: error.message || "Failed to fetch component content",
+        loading: false,
+      });
+    }
+  },
+
+  saveComponent: async (
+    filename: string,
+    content: ComponentContent,
+    overwrite = false
+  ) => {
+    try {
+      set({ loading: true, error: null });
+      await api.post("/components", {
+        filename,
+        content,
+        overwrite,
+      });
+      set({ loading: false });
+      // Refresh components list
+      get().fetchComponents();
+      return true;
+    } catch (error: any) {
+      set({
+        error: error.message || "Failed to save component",
+        loading: false,
+      });
+      return false;
+    }
+  },
+
+  deleteComponent: async (filename: string) => {
+    try {
+      set({ loading: true, error: null });
+      await api.delete(`/components/${filename}`);
+      set({ loading: false });
+      // Refresh components list
+      get().fetchComponents();
+      return true;
+    } catch (error: any) {
+      set({
+        error: error.message || "Failed to delete component",
+        loading: false,
+      });
+      return false;
+    }
+  },
+
+  generateComponentPreview: async (
+    cad_commands: CADCommand[],
+    color?: [number, number, number]
+  ) => {
+    try {
+      set({ loading: true, error: null });
+      const { data } = await api.post("/components/preview", {
+        cad_commands,
+        color: color || [0.7, 0.7, 0.7],
+      });
+      set({ loading: false });
+
+      if (data.success) {
+        return {
+          data: data.gltf || data.glb_base64 || data.stl_base64,
+          format:
+            data.format ||
+            (data.gltf ? "gltf" : data.glb_base64 ? "glb" : "stl"),
+        };
+      } else {
+        throw new Error(data.error || "Preview generation failed");
+      }
+    } catch (error: any) {
+      set({
+        error: error.message || "Failed to generate component preview",
+        loading: false,
+      });
+      return null;
     }
   },
 

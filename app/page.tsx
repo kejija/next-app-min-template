@@ -21,15 +21,23 @@ import {
   IconCube,
   IconSettings,
   IconEdit,
+  IconComponents,
 } from "@tabler/icons-react";
 import useStore, { Example } from "./store";
 import ExamplesPanel from "../src/components/ExamplesPanel";
 import SimulationManager from "../src/components/SimulationManager";
 import CustomSimulationManager from "../src/components/CustomSimulationManager";
+import ComponentsManager from "../src/components/ComponentsManager";
 import ResultsCharts from "../src/components/ResultsCharts";
 import GLTFViewer from "../src/components/GLTFViewer";
 
-type ActiveTab = "examples" | "simulations" | "custom" | "results" | "viewer";
+type ActiveTab =
+  | "examples"
+  | "simulations"
+  | "custom"
+  | "results"
+  | "viewer"
+  | "components";
 
 export default function MainPage() {
   const [opened, { toggle }] = useDisclosure();
@@ -47,6 +55,12 @@ export default function MainPage() {
       label: "Examples",
       value: "examples" as ActiveTab,
       description: "Browse and select simulation examples",
+    },
+    {
+      icon: IconComponents,
+      label: "Components",
+      value: "components" as ActiveTab,
+      description: "Create and manage CAD component presets",
     },
     {
       icon: IconEdit,
@@ -82,6 +96,9 @@ export default function MainPage() {
     switch (activeTab) {
       case "examples":
         return <ExamplesPanel onRunSimulation={handleExampleRun} />;
+
+      case "components":
+        return <ComponentsManager />;
 
       case "custom":
         return <CustomSimulationManager />;

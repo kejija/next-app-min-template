@@ -40,7 +40,12 @@ const ReactJsonView = dynamic(() => import("react-json-view"), {
   loading: () => <div>Loading JSON editor...</div>,
 });
 
-import useStore, { CustomSimulation, Example } from "../../app/store";
+import useStore, {
+  CustomSimulation,
+  Example,
+  Component,
+  ComponentContent,
+} from "../../app/store";
 
 export default function CustomSimulationManager() {
   const {
@@ -48,6 +53,7 @@ export default function CustomSimulationManager() {
     selectedCustomSimulation,
     customSimulationContent,
     examples,
+    components,
     loading,
     error,
     fetchCustomSimulations,
@@ -57,6 +63,8 @@ export default function CustomSimulationManager() {
     deleteCustomSimulation,
     copyExampleToCustom,
     fetchExamples,
+    fetchComponents,
+    fetchComponentContent,
     startSimulation,
     clearError,
   } = useStore();
@@ -73,10 +81,14 @@ export default function CustomSimulationManager() {
   const [selectedExample, setSelectedExample] = useState<string>("");
   const [editingContent, setEditingContent] = useState<any>(null);
   const [editingFilename, setEditingFilename] = useState("");
+  const [componentSelectorOpen, setComponentSelectorOpen] = useState(false);
+  const [selectedComponentForAdd, setSelectedComponentForAdd] =
+    useState<Component | null>(null);
 
   useEffect(() => {
     fetchCustomSimulations();
     fetchExamples();
+    fetchComponents();
   }, []);
 
   const handleCreateNew = () => {
@@ -192,6 +204,71 @@ export default function CustomSimulationManager() {
       // Could switch to simulations tab or show notification
       console.log("Started custom simulation:", simulationId);
     }
+  };
+
+  const handleAddComponent = () => {
+    setComponentSelectorOpen(true);
+  };
+
+  const handleSelectComponentForAdd = async (component: Component) => {
+    setSelectedComponentForAdd(component);
+    await fetchComponentContent(component.filename);
+  };
+
+  const handleConfirmAddComponent = () => {
+    if (!selectedComponentForAdd || !editingContent) return;
+
+    // Create a new component for the simulation based on the preset
+    // Note: We'll use the component data we already have from the list
+    const newComponent = {
+      name: `${selectedComponentForAdd.name}_${Date.now()}`, // Make unique
+      material: selectedComponentForAdd.material || "aluminum",
+      density: 2700,
+      fixed: false,
+      collision: {
+        enabled: true,
+        shape: "box",
+        params: {},
+      },
+      color: [0.7, 0.7, 0.7],
+      cad_commands: [
+        // Default box command - user can edit this later
+        {
+          command: "box",
+          params: {
+            length: 1.0,
+            width: 1.0,
+            height: 1.0,
+            centered: true,
+          },
+        },
+      ],
+    };
+
+    // Add to simulation components
+    const updatedComponents = [
+      ...(editingContent.components || []),
+      newComponent,
+    ];
+    setEditingContent({
+      ...editingContent,
+      components: updatedComponents,
+    });
+
+    setComponentSelectorOpen(false);
+    setSelectedComponentForAdd(null);
+  };
+
+  const handleRemoveComponent = (index: number) => {
+    if (!editingContent) return;
+
+    const updatedComponents = editingContent.components.filter(
+      (_: any, i: number) => i !== index
+    );
+    setEditingContent({
+      ...editingContent,
+      components: updatedComponents,
+    });
   };
 
   // Update editing content when custom simulation content is loaded
@@ -530,14 +607,53 @@ export default function CustomSimulationManager() {
                       </Grid.Col>
                     </Grid>
 
-                    <Text fw={500} mt="md">
-                      Components ({editingContent.components?.length || 0})
-                    </Text>
-                    <Text size="sm" c="dimmed">
-                      Component editing is complex and currently best done in
-                      JSON mode. Use the JSON Editor tab for detailed component
-                      configuration.
-                    </Text>
+                    <Group justify="space-between" mt="md">
+                      <Text fw={500}>
+                        Components ({editingContent.components?.length || 0})
+                      </Text>
+                      <Button
+                        size="sm"
+                        leftSection={<IconPlus size={14} />}
+                        onClick={handleAddComponent}
+                      >
+                        Add Component
+                      </Button>
+                    </Group>
+
+                    <Stack gap="sm" mt="md">
+                      {editingContent.components?.length === 0 ? (
+                        <Text c="dimmed" ta="center" py="md">
+                          No components yet. Add components from your presets.
+                        </Text>
+                      ) : (
+                        editingContent.components?.map(
+                          (component: any, index: number) => (
+                            <Card key={index} withBorder p="sm">
+                              <Group justify="space-between">
+                                <div>
+                                  <Text fw={500} size="sm">
+                                    {component.name}
+                                  </Text>
+                                  <Text size="xs" c="dimmed">
+                                    Material: {component.material || "N/A"} |
+                                    Commands:{" "}
+                                    {component.cad_commands?.length || 0}
+                                  </Text>
+                                </div>
+                                <ActionIcon
+                                  color="red"
+                                  variant="light"
+                                  size="sm"
+                                  onClick={() => handleRemoveComponent(index)}
+                                >
+                                  <IconTrash size={14} />
+                                </ActionIcon>
+                              </Group>
+                            </Card>
+                          )
+                        )
+                      )}
+                    </Stack>
                   </Stack>
                 </ScrollArea>
               </Tabs.Panel>
@@ -605,6 +721,90 @@ export default function CustomSimulationManager() {
             </Button>
             <Button color="red" onClick={confirmDelete} loading={loading}>
               Delete
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Component Selector Modal */}
+      <Modal
+        opened={componentSelectorOpen}
+        onClose={() => {
+          setComponentSelectorOpen(false);
+          setSelectedComponentForAdd(null);
+        }}
+        title="Add Component from Presets"
+        size="lg"
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Select a component preset to add to your simulation. You can modify
+            its parameters after adding.
+          </Text>
+
+          <ScrollArea h={300}>
+            <Stack gap="sm">
+              {components.length === 0 ? (
+                <Text c="dimmed" ta="center" py="xl">
+                  No component presets available. Create some in the Components
+                  tab first.
+                </Text>
+              ) : (
+                components.map((component) => (
+                  <Card
+                    key={component.filename}
+                    withBorder
+                    p="sm"
+                    style={{
+                      cursor: "pointer",
+                      backgroundColor:
+                        selectedComponentForAdd?.filename === component.filename
+                          ? "#e3f2fd"
+                          : undefined,
+                    }}
+                    onClick={() => handleSelectComponentForAdd(component)}
+                  >
+                    <Group justify="space-between">
+                      <div>
+                        <Text fw={500} size="sm">
+                          {component.name}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {component.description || "No description"}
+                        </Text>
+                        <Group gap="xs" mt="xs">
+                          <Badge size="xs" variant="light">
+                            {component.cad_commands} commands
+                          </Badge>
+                          {component.material && (
+                            <Badge size="xs" variant="light" color="blue">
+                              {component.material}
+                            </Badge>
+                          )}
+                        </Group>
+                      </div>
+                    </Group>
+                  </Card>
+                ))
+              )}
+            </Stack>
+          </ScrollArea>
+
+          <Group justify="flex-end" gap="sm">
+            <Button
+              variant="light"
+              onClick={() => {
+                setComponentSelectorOpen(false);
+                setSelectedComponentForAdd(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmAddComponent}
+              disabled={!selectedComponentForAdd}
+            >
+              Add Component
             </Button>
           </Group>
         </Stack>

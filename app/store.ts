@@ -49,6 +49,7 @@ export interface Component {
 export interface CADCommand {
   command: string;
   params: Record<string, any>;
+  hidden?: boolean;
 }
 
 export interface ComponentContent {

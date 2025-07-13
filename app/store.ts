@@ -50,6 +50,8 @@ export interface CADCommand {
   command: string;
   params: Record<string, any>;
   hidden?: boolean;
+  objects?: number[]; // For boolean operations - references to previous command indices
+  target?: number[]; // For transform operations - references to previous command indices
 }
 
 export interface ComponentContent {

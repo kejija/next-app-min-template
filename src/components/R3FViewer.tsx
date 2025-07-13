@@ -2,7 +2,7 @@
 
 import React, { Suspense, useRef, useEffect, useState } from "react";
 import { Canvas, useFrame, useLoader } from "@react-three/fiber";
-import { OrbitControls, Box, Sphere } from "@react-three/drei";
+import { OrbitControls, Box, Sphere, Grid } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader";
 import * as THREE from "three";
@@ -22,12 +22,27 @@ interface R3FViewerProps {
   width?: number;
   height?: number;
   backgroundColor?: string;
+  selectedCommandIndex?: number | null;
+  commands?: Array<{ command: string; is2D?: boolean }>;
 }
 
 // Component to load and display the model
-function Model({ gltfData, glbData, stlData }: { gltfData?: string; glbData?: string; stlData?: string }) {
+function Model({
+  gltfData,
+  glbData,
+  stlData,
+  selectedCommandIndex,
+  commands,
+}: {
+  gltfData?: string;
+  glbData?: string;
+  stlData?: string;
+  selectedCommandIndex?: number | null;
+  commands?: Array<{ command: string; is2D?: boolean }>;
+}) {
   const meshRef = useRef<THREE.Group>(null);
   const [model, setModel] = useState<THREE.Group | THREE.Mesh | null>(null);
+  const [needsUpdate, setNeedsUpdate] = useState(false);
 
   useEffect(() => {
     const loadModel = async () => {
@@ -47,12 +62,14 @@ function Model({ gltfData, glbData, stlData }: { gltfData?: string; glbData?: st
 
           console.log("R3F: GLB loaded successfully:", gltf);
           const loadedModel = gltf.scene;
-          
+
           // Ensure meshes have materials
           loadedModel.traverse((child: any) => {
             if (child.isMesh) {
               if (!child.material) {
-                child.material = new THREE.MeshStandardMaterial({ color: 0x888888 });
+                child.material = new THREE.MeshStandardMaterial({
+                  color: 0x888888,
+                });
               }
               child.castShadow = true;
               child.receiveShadow = true;
@@ -71,7 +88,9 @@ function Model({ gltfData, glbData, stlData }: { gltfData?: string; glbData?: st
           loadedModel.traverse((child: any) => {
             if (child.isMesh) {
               if (!child.material) {
-                child.material = new THREE.MeshStandardMaterial({ color: 0x888888 });
+                child.material = new THREE.MeshStandardMaterial({
+                  color: 0x888888,
+                });
               }
               child.castShadow = true;
               child.receiveShadow = true;
@@ -118,7 +137,7 @@ function Model({ gltfData, glbData, stlData }: { gltfData?: string; glbData?: st
     if (model && meshRef.current) {
       // Clear previous model
       meshRef.current.clear();
-      
+
       // Add new model
       meshRef.current.add(model);
 
@@ -145,10 +164,80 @@ function Model({ gltfData, glbData, stlData }: { gltfData?: string; glbData?: st
     }
   }, [model]);
 
+  // Apply styling when selection or commands change
+  useEffect(() => {
+    if (model) {
+      applyModelStyling(model);
+      setNeedsUpdate(true);
+    }
+  }, [model, selectedCommandIndex, commands]);
+
+  // Force re-render when needed
+  useFrame(() => {
+    if (needsUpdate) {
+      setNeedsUpdate(false);
+    }
+  });
+
+  const applyModelStyling = (model: THREE.Group | THREE.Mesh) => {
+    // Check if the model contains primarily 2D shapes
+    const has2DShapes = commands?.some((cmd) => cmd.is2D) || false;
+    const isSelected =
+      selectedCommandIndex !== null && selectedCommandIndex !== undefined;
+
+    console.log("R3F: Applying styling", {
+      has2DShapes,
+      isSelected,
+      commands,
+      selectedCommandIndex,
+    });
+
+    model.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material) {
+        // Always clone the material to ensure changes are applied
+        const originalMaterial = child.material as THREE.MeshStandardMaterial;
+        const material = originalMaterial.clone();
+        child.material = material;
+
+        // Base styling
+        if (has2DShapes) {
+          // 2D shapes: lower opacity and different color
+          material.transparent = true;
+          material.opacity = 0.5;
+          material.color.setHex(0x4dabf7); // Light blue for 2D shapes
+          console.log("R3F: Applied 2D styling - transparent blue");
+        } else {
+          // 3D shapes: normal styling
+          material.transparent = false;
+          material.opacity = 1.0;
+          material.color.setHex(0x888888); // Default gray
+          console.log("R3F: Applied 3D styling - opaque gray");
+        }
+
+        // Selection highlighting
+        if (isSelected) {
+          // Add strong outline effect for selected shapes
+          material.emissive.setHex(0x2563eb); // Blue emissive
+          material.emissiveIntensity = 0.4;
+          // Make selected items more opaque and brighter
+          if (material.transparent) {
+            material.opacity = Math.min(material.opacity + 0.4, 1.0);
+          }
+          material.color.multiplyScalar(1.2); // Brighten the color
+          console.log("R3F: Applied selection highlighting");
+        } else {
+          material.emissive.setHex(0x000000);
+          material.emissiveIntensity = 0;
+        }
+
+        // Force material update
+        material.needsUpdate = true;
+      }
+    });
+  };
+
   return (
-    <group ref={meshRef}>
-      {/* Model will be added here dynamically */}
-    </group>
+    <group ref={meshRef}>{/* Model will be added here dynamically */}</group>
   );
 }
 
@@ -186,6 +275,8 @@ export default function R3FViewer({
   width = 400,
   height = 400,
   backgroundColor = "#f8f9fa",
+  selectedCommandIndex,
+  commands,
 }: R3FViewerProps) {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const controlsRef = useRef<any>(null);
@@ -236,9 +327,31 @@ export default function R3FViewer({
           style={{ background: bgColor }}
         >
           <Lighting />
-          
+
+          {/* Grid for reference */}
+          <Grid
+            args={[10, 10]}
+            position={[0, -0.5, 0]}
+            cellSize={0.5}
+            cellThickness={0.5}
+            cellColor={isDarkMode ? "#444" : "#ccc"}
+            sectionSize={2.5}
+            sectionThickness={1}
+            sectionColor={isDarkMode ? "#666" : "#999"}
+            fadeDistance={15}
+            fadeStrength={1}
+            followCamera={false}
+            infiniteGrid={true}
+          />
+
           <Suspense fallback={<LoadingFallback />}>
-            <Model gltfData={gltfData} glbData={glbData} stlData={stlData} />
+            <Model
+              gltfData={gltfData}
+              glbData={glbData}
+              stlData={stlData}
+              selectedCommandIndex={selectedCommandIndex}
+              commands={commands}
+            />
           </Suspense>
 
           <OrbitControls

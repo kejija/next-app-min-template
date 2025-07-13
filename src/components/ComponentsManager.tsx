@@ -39,7 +39,7 @@ import useStore, {
   ComponentContent,
   CADCommand,
 } from "../../app/store";
-import CADCommandEditor from "./CADCommandEditor";
+import CADCommandEditor, { CAD_COMMAND_TYPES } from "./CADCommandEditor";
 import R3FViewer from "./R3FViewer";
 
 export default function ComponentsManager() {
@@ -76,6 +76,9 @@ export default function ComponentsManager() {
     format: string;
   } | null>(null);
   const [livePreview, setLivePreview] = useState(true);
+  const [selectedCommandIndex, setSelectedCommandIndex] = useState<
+    number | null
+  >(null);
   const lastPreviewCommandsRef = useRef<string>("");
 
   useEffect(() => {
@@ -171,7 +174,8 @@ export default function ComponentsManager() {
 
   const handleGeneratePreview = async (
     commands?: CADCommand[],
-    color?: [number, number, number]
+    color?: [number, number, number],
+    selectedIndex?: number | null
   ) => {
     const cadCommands = commands || componentContent?.cad_commands;
     const componentColor = color || componentContent?.color;
@@ -194,6 +198,7 @@ export default function ComponentsManager() {
     }
 
     lastPreviewCommandsRef.current = commandsString;
+    setSelectedCommandIndex(selectedIndex || null);
     const preview = await generateComponentPreview(cadCommands, componentColor);
     if (preview) {
       setPreviewData(preview);
@@ -495,10 +500,11 @@ export default function ComponentsManager() {
                         }
                         onPreview={
                           livePreview
-                            ? async (commands) => {
+                            ? async (commands, selectedIndex) => {
                                 await handleGeneratePreview(
                                   commands,
-                                  editingContent.color
+                                  editingContent.color,
+                                  selectedIndex
                                 );
                               }
                             : undefined
@@ -544,6 +550,26 @@ export default function ComponentsManager() {
                             }
                             width={300}
                             height={250}
+                            selectedCommandIndex={selectedCommandIndex}
+                            commands={(() => {
+                              const commandsData =
+                                editingContent.cad_commands?.map((cmd) => ({
+                                  command: cmd.command,
+                                  is2D:
+                                    CAD_COMMAND_TYPES[
+                                      cmd.command as keyof typeof CAD_COMMAND_TYPES
+                                    ]?.is2D || false,
+                                }));
+                              console.log(
+                                "ComponentsManager: Passing commands to R3FViewer",
+                                {
+                                  commandsData,
+                                  selectedCommandIndex,
+                                  has2D: commandsData?.some((cmd) => cmd.is2D),
+                                }
+                              );
+                              return commandsData;
+                            })()}
                           />
                         ) : (
                           <Text size="sm" c="dimmed">
@@ -638,6 +664,14 @@ export default function ComponentsManager() {
                 }
                 width={600}
                 height={400}
+                selectedCommandIndex={selectedCommandIndex}
+                commands={componentContent?.cad_commands?.map((cmd) => ({
+                  command: cmd.command,
+                  is2D:
+                    CAD_COMMAND_TYPES[
+                      cmd.command as keyof typeof CAD_COMMAND_TYPES
+                    ]?.is2D || false,
+                }))}
               />
             ) : (
               <Text c="dimmed">No preview available</Text>
